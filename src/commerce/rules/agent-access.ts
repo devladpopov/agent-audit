@@ -1,10 +1,34 @@
-import type { Rule } from "../core/types.js";
+import type { CommerceRule } from "../types.js";
 import { AGENT_USER_AGENTS, isFullyBlocked, parseRobots } from "../fetch/robots.js";
 import { visibleTextLength } from "../fetch/html.js";
 
 const CAPTCHA_MARKERS = ["cf-challenge", "g-recaptcha", "hcaptcha", "cf_chl_opt", "px-captcha"];
 
-export const agentAccessRules: Rule[] = [
+export const agentAccessRules: CommerceRule[] = [
+  {
+    id: "agent-access.reachable",
+    category: "agent-access",
+    title: "Store answers identified automated clients",
+    weight: 4,
+    severity: "high",
+    check(ctx) {
+      const { toolStatus, browserStatus, usedBrowserFallback } = ctx.access;
+      if (!usedBrowserFallback && toolStatus !== null && toolStatus < 400) {
+        return { status: "pass", message: `Home page returned HTTP ${toolStatus} to an identified bot user-agent.` };
+      }
+      if (usedBrowserFallback) {
+        return {
+          status: "fail",
+          message: `Home page returned HTTP ${toolStatus ?? "no response"} to an identified bot but ${browserStatus} to a browser. A WAF or bot filter is turning away automated clients; AI agents that are not explicitly allowlisted will be blocked the same way. The rest of this report was produced with browser headers.`,
+          fixSuggestion: "Allow verified AI agent user-agents (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, PerplexityBot, Google-Extended) through your WAF/bot-protection rules, at least for product and policy pages.",
+        };
+      }
+      return {
+        status: "fail",
+        message: `Home page did not load for either a bot (HTTP ${toolStatus ?? "no response"}) or a browser (HTTP ${browserStatus ?? "no response"}). Results below are unreliable.`,
+      };
+    },
+  },
   {
     id: "agent-access.robots-not-blocking",
     category: "agent-access",
@@ -51,7 +75,7 @@ export const agentAccessRules: Rule[] = [
     title: "Page has meaningful content without executing JavaScript",
     weight: 3,
     check(ctx) {
-      const len = visibleTextLength(ctx.$);
+      const len = visibleTextLength(ctx.home.$);
       if (len > 800) return { status: "pass", message: `~${len} chars of text rendered without JS.` };
       if (len > 200)
         return {
@@ -72,7 +96,7 @@ export const agentAccessRules: Rule[] = [
     title: "No anti-bot wall on the landing page",
     weight: 2,
     check(ctx) {
-      const html = ctx.html.toLowerCase();
+      const html = ctx.home.html.toLowerCase();
       const hit = CAPTCHA_MARKERS.find((m) => html.includes(m));
       if (!hit) return { status: "pass", message: "No obvious CAPTCHA/challenge markers detected." };
       return {

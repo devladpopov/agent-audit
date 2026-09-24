@@ -27,17 +27,32 @@ Every finding links to the spec it's based on: [UCP](https://github.com/Universa
 ## Usage
 
 ```bash
-npx agent-audit scan https://example-store.com
-npx agent-audit scan https://example-store.com --json
-npx agent-audit scan https://example-store.com --markdown
-npx agent-audit scan https://example-store.com --min-score 70   # CI gate: non-zero exit if below
+npx agent-audit shop https://example-store.com
+npx agent-audit shop https://example-store.com --product-url https://example-store.com/product/blue-mug
+npx agent-audit shop https://example-store.com --json
+npx agent-audit shop https://example-store.com --markdown
+npx agent-audit shop https://example-store.com --min-score 70   # CI gate: non-zero exit if below
+```
+
+The scanner checks the home page, `robots.txt`, well-known paths, and one product page. It finds
+the product page itself (product sitemaps, product-card links); pass `--product-url` if it picks
+the wrong one. Categories that can't be measured from outside (checkout, for now) show as
+"not assessed" and don't count toward the score.
+
+### GitHub Action
+
+```yaml
+- uses: devladpopov/agent-audit@v0   # placeholder until published
+  with:
+    url: https://example-store.com
+    min-score: 70
 ```
 
 ## Development
 
 ```bash
 bun install
-bun run src/cli.ts scan https://example.com   # run from source
+bun run src/cli.ts shop https://example.com   # run from source
 bun test                                       # unit tests
 bun run typecheck
 bun run build                                  # -> dist/
@@ -45,12 +60,15 @@ bun run build                                  # -> dist/
 
 ## Architecture
 
-- `src/core/` — scoring, report rendering (text/markdown/JSON), SVG badge. Kept generic on purpose
-  so a future sibling tool (an MCP security scanner) can reuse the same engine shape.
-- `src/fetch/` — HTTP client, HTML/JSON-LD parsing, robots.txt parsing.
-- `src/rules/` — one file per category; each rule is `{ id, category, weight, specUrl, check(ctx) }`.
-- `src/engine.ts` — fetches the page + well-known paths once, runs all rules, aggregates the score.
-- `src/cli.ts` — thin CLI wrapper (`commander`) over `runScan()`.
+The repo is set up for a series of scanners that share one engine. The store checker is the first;
+an MCP server trust scanner is planned next.
+
+- `src/core/`: scanner-agnostic. Rule/finding/score types, rule runner, scorer (0-100, grade,
+  "not assessed" categories), text/Markdown/JSON reports, SVG and shields.io badges, HTTP client.
+- `src/commerce/`: the store scanner. `engine.ts` fetches the home page, robots.txt, well-known
+  paths and a product page once and builds the context; `rules/` has one file per category, each
+  rule `{ id, category, weight, severity?, specUrl, check(ctx) }`.
+- `src/cli.ts`: `agent-audit <scanner> <target>` with shared output flags.
 
 ## License
 

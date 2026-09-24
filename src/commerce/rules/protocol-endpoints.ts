@@ -1,6 +1,6 @@
-import type { Rule } from "../core/types.js";
+import type { CommerceRule } from "../types.js";
 
-export const protocolEndpointRules: Rule[] = [
+export const protocolEndpointRules: CommerceRule[] = [
   {
     id: "protocol.ucp-manifest",
     category: "protocol-endpoints",
@@ -10,9 +10,13 @@ export const protocolEndpointRules: Rule[] = [
     async check(ctx) {
       const probe = await ctx.fetchText("/.well-known/ucp");
       if (!probe.ok) {
+        // Scored as "warn" rather than "info": this is the one protocol-endpoints signal we CAN
+        // verify objectively, so letting it default to "info" (excluded from scoring) made this
+        // whole category silently return 100/100 for every store that has no UCP support at all —
+        // caught by the day-3 dataset run (0/20 real stores had a manifest, yet all scored 100 here).
         return {
-          status: "info",
-          message: "No /.well-known/ucp manifest found (UCP is optional but growing fast among Google/Shopify-connected agents).",
+          status: "warn",
+          message: "No /.well-known/ucp manifest found. UCP adoption is still early outside Shopify, so this is a warning, not a failure — but it's the main reason your protocol-endpoints score isn't higher.",
           fixSuggestion: "Publish a UCP manifest at /.well-known/ucp if you want to be discoverable to UCP-based shopping agents.",
         };
       }

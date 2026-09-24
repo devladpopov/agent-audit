@@ -1,38 +1,34 @@
-import type { CategoryScore, Finding, Status } from "./types.js";
-import { CATEGORIES, type Category } from "./types.js";
+import type { CategoryDef, CategoryScore, Finding, Grade, Status } from "./types.js";
 
-/** How much each status counts toward a category's score. */
+/** How much each status counts toward a category's score. info and skip are excluded entirely. */
 const STATUS_CREDIT: Record<Status, number> = {
   pass: 1,
   warn: 0.5,
   fail: 0,
-  info: 0, // informational, excluded from denominator too (see scoreCategory)
-  skip: 0, // excluded from denominator
+  info: 0,
+  skip: 0,
 };
 
-/** Default equal weighting across categories; callers (CLI/web) can override. */
-export const DEFAULT_CATEGORY_WEIGHTS: Record<Category, number> = Object.fromEntries(
-  CATEGORIES.map((c) => [c, 1]),
-) as Record<Category, number>;
-
-export function scoreCategory(category: Category, findings: Finding[], weight: number): CategoryScore {
+export function scoreCategory(def: CategoryDef, findings: Finding[]): CategoryScore {
   const scored = findings.filter((f) => f.status !== "info" && f.status !== "skip");
   const totalWeight = scored.reduce((sum, f) => sum + f.weight, 0);
   const earned = scored.reduce((sum, f) => sum + f.weight * STATUS_CREDIT[f.status], 0);
-  const score = totalWeight === 0 ? 100 : Math.round((earned / totalWeight) * 100);
-  return { category, score, weight, findings };
+  // Nothing measurable means "not assessed", not "perfect": a category made only of info findings
+  // used to score 100 and inflate the overall score.
+  const score = totalWeight === 0 ? null : Math.round((earned / totalWeight) * 100);
+  return { category: def.id, label: def.label, score, weight: def.weight, findings };
 }
 
-export function scoreOverall(
-  categories: CategoryScore[],
-): { overallScore: number; grade: "A" | "B" | "C" | "D" | "F" } {
-  const totalWeight = categories.reduce((sum, c) => sum + c.weight, 0);
-  const weighted = categories.reduce((sum, c) => sum + c.score * c.weight, 0);
+/** Weighted average over assessed categories only. */
+export function scoreOverall(categories: CategoryScore[]): { overallScore: number; grade: Grade } {
+  const assessed = categories.filter((c) => c.score !== null);
+  const totalWeight = assessed.reduce((sum, c) => sum + c.weight, 0);
+  const weighted = assessed.reduce((sum, c) => sum + (c.score ?? 0) * c.weight, 0);
   const overallScore = totalWeight === 0 ? 0 : Math.round(weighted / totalWeight);
   return { overallScore, grade: toGrade(overallScore) };
 }
 
-export function toGrade(score: number): "A" | "B" | "C" | "D" | "F" {
+export function toGrade(score: number): Grade {
   if (score >= 90) return "A";
   if (score >= 75) return "B";
   if (score >= 60) return "C";

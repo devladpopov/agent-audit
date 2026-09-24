@@ -1,52 +1,12 @@
-import type { CheerioAPI } from "cheerio";
-
 /**
- * Core types shared by every rule-based scanner in this project family
- * (this commerce checker today, the planned MCP Trust Scanner next).
- * Keep this file free of commerce-specific concepts so it stays reusable.
+ * Core types shared by every scanner in the series (commerce readiness today, MCP Trust Scanner next).
+ * Nothing in src/core may import from a specific scanner (src/commerce, src/mcp).
  */
-
-export type Category =
-  | "product-data"
-  | "feeds"
-  | "protocol-endpoints"
-  | "agent-access"
-  | "checkout-readiness"
-  | "trust-signals";
-
-export const CATEGORIES: readonly Category[] = [
-  "product-data",
-  "feeds",
-  "protocol-endpoints",
-  "agent-access",
-  "checkout-readiness",
-  "trust-signals",
-] as const;
 
 export type Status = "pass" | "warn" | "fail" | "info" | "skip";
 
-export interface WellKnownProbe {
-  path: string;
-  status: number | null;
-  ok: boolean;
-  contentType?: string;
-  body?: string;
-  error?: string;
-}
-
-/** Everything a rule is allowed to look at. Built once per scan, reused by all rules. */
-export interface RuleContext {
-  inputUrl: string;
-  finalUrl: string;
-  statusCode: number;
-  html: string;
-  $: CheerioAPI;
-  headers: Record<string, string>;
-  jsonLd: unknown[];
-  robotsTxt: { fetched: boolean; body: string | null };
-  wellKnown: Record<string, WellKnownProbe>;
-  fetchText: (path: string) => Promise<WellKnownProbe>;
-}
+/** Impact of a failed check. Commerce rules mostly use medium/low; security scanners need the full range. */
+export type Severity = "critical" | "high" | "medium" | "low";
 
 export interface RuleOutcome {
   status: Status;
@@ -54,41 +14,62 @@ export interface RuleOutcome {
   detail?: string;
   evidence?: string;
   fixSuggestion?: string;
+  /** Overrides the rule's default severity for this particular outcome. */
+  severity?: Severity;
 }
 
-export interface Rule {
+export interface Rule<Ctx> {
   id: string;
-  category: Category;
+  category: string;
   title: string;
-  /** Relative weight within its category. Categories are then combined per ScoringConfig. */
+  /** Relative weight within its category. */
   weight: number;
+  severity?: Severity;
   specUrl?: string;
-  check: (ctx: RuleContext) => Promise<RuleOutcome> | RuleOutcome;
+  check: (ctx: Ctx) => Promise<RuleOutcome> | RuleOutcome;
 }
 
 export interface Finding extends RuleOutcome {
   id: string;
-  category: Category;
+  category: string;
   title: string;
   weight: number;
   specUrl?: string;
 }
 
+export interface CategoryDef {
+  id: string;
+  label: string;
+  /** Share of the overall score. */
+  weight: number;
+}
+
 export interface CategoryScore {
-  category: Category;
-  score: number; // 0-100
-  weight: number; // this category's share of the overall score
+  category: string;
+  label: string;
+  /** 0-100, or null when nothing in the category could be measured ("not assessed"). */
+  score: number | null;
+  weight: number;
   findings: Finding[];
 }
+
+export interface ScanTarget {
+  /** e.g. "store", "mcp-server" */
+  kind: string;
+  input: string;
+  resolved: string;
+}
+
+export type Grade = "A" | "B" | "C" | "D" | "F";
 
 export interface ScanResult {
   tool: string;
   toolVersion: string;
+  scanner: string;
   scannedAt: string;
-  inputUrl: string;
-  finalUrl: string;
-  overallScore: number; // 0-100
-  grade: "A" | "B" | "C" | "D" | "F";
+  target: ScanTarget;
+  overallScore: number;
+  grade: Grade;
   categories: CategoryScore[];
   findings: Finding[];
   errors: string[];

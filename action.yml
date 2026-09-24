@@ -1,5 +1,5 @@
 name: "Agent Readiness Audit"
-description: "Scores your storefront's readiness for AI shopping agents (UCP/ACP/AP2, structured data, feeds, access, checkout, trust) and fails CI below a threshold."
+description: "Scores your storefront's readiness for AI shopping agents (UCP/ACP/AP2, product data, feeds, agent access, trust) and fails CI below a threshold."
 branding:
   icon: "check-circle"
   color: "green"
@@ -8,20 +8,29 @@ inputs:
   url:
     description: "Storefront URL to scan"
     required: true
+  product-url:
+    description: "Optional product page to use for product-data checks (default: auto-discover)"
+    required: false
+    default: ""
   min-score:
     description: "Fail the job if the overall score is below this value (0-100)"
     required: false
     default: "0"
-  format:
-    description: "Report format written to the job summary: text | markdown"
-    required: false
-    default: "markdown"
 
 runs:
   using: "composite"
   steps:
     - name: Run agent-audit
       shell: bash
+      # Inputs go through env vars, never ${{ }} inside the script, so a crafted URL can't inject shell.
+      env:
+        AA_URL: ${{ inputs.url }}
+        AA_PRODUCT_URL: ${{ inputs.product-url }}
+        AA_MIN_SCORE: ${{ inputs.min-score }}
       run: |
-        npx --yes agent-audit scan "${{ inputs.url }}" --markdown --min-score "${{ inputs.min-score }}" --out report.md
+        args=(shop "$AA_URL" --markdown --min-score "$AA_MIN_SCORE" --out report.md)
+        if [ -n "$AA_PRODUCT_URL" ]; then args+=(--product-url "$AA_PRODUCT_URL"); fi
+        status=0
+        npx --yes agent-audit "${args[@]}" || status=$?
         cat report.md >> "$GITHUB_STEP_SUMMARY"
+        exit $status

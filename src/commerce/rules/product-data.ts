@@ -1,4 +1,4 @@
-import type { Rule } from "../core/types.js";
+import type { CommerceRule } from "../types.js";
 import { findByType } from "../fetch/html.js";
 
 const SCHEMA_SPEC = "https://schema.org/Product";
@@ -12,7 +12,23 @@ function getOffers(product: Record<string, unknown>): Record<string, unknown>[] 
   return offers.filter((o): o is Record<string, unknown> => !!o && typeof o === "object");
 }
 
-export const productDataRules: Rule[] = [
+const SOURCE_NOTE: Record<string, string> = {
+  input: "the scanned URL (it already is a product page)",
+  user: "the product page passed with --product-url",
+  discovered: "a product page discovered from the store's links/sitemap",
+  "homepage-fallback": "the home page, because no product page could be discovered (pass --product-url for an accurate result)",
+};
+
+export const productDataRules: CommerceRule[] = [
+  {
+    id: "product-data.page-used",
+    category: "product-data",
+    title: "Page used for product-data checks",
+    weight: 0,
+    check(ctx) {
+      return { status: "info", message: `Checked ${ctx.product.url}: ${SOURCE_NOTE[ctx.productSource]}.` };
+    },
+  },
   {
     id: "product-data.has-jsonld",
     category: "product-data",
@@ -20,7 +36,7 @@ export const productDataRules: Rule[] = [
     weight: 1,
     specUrl: "https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data",
     check(ctx) {
-      if (ctx.jsonLd.length > 0) return { status: "pass", message: `${ctx.jsonLd.length} JSON-LD node(s) found.` };
+      if (ctx.product.jsonLd.length > 0) return { status: "pass", message: `${ctx.product.jsonLd.length} JSON-LD node(s) found.` };
       return {
         status: "fail",
         message: "No <script type=\"application/ld+json\"> found on the page.",
@@ -35,8 +51,15 @@ export const productDataRules: Rule[] = [
     weight: 3,
     specUrl: SCHEMA_SPEC,
     check(ctx) {
-      const products = findByType(ctx.jsonLd, "Product");
+      const products = findByType(ctx.product.jsonLd, "Product");
       if (products.length > 0) return { status: "pass", message: `${products.length} Product node(s) found.` };
+      if (ctx.product.$('[itemtype*="schema.org/Product" i]').length > 0) {
+        return {
+          status: "warn",
+          message: "Product is marked up with microdata only, no JSON-LD. Parsers that only read JSON-LD will miss it, and the offer checks below are skipped.",
+          fixSuggestion: "Add a JSON-LD Product block alongside (or instead of) the microdata; Google and most agent tooling prefer JSON-LD.",
+        };
+      }
       return {
         status: "fail",
         message: "No schema.org Product entity in JSON-LD.",
@@ -51,7 +74,7 @@ export const productDataRules: Rule[] = [
     weight: 3,
     specUrl: "https://schema.org/Offer",
     check(ctx) {
-      const products = findByType(ctx.jsonLd, "Product");
+      const products = findByType(ctx.product.jsonLd, "Product");
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const missing: string[] = [];
       let anyOffer = false;
@@ -83,7 +106,7 @@ export const productDataRules: Rule[] = [
     weight: 2,
     specUrl: "https://schema.org/availability",
     check(ctx) {
-      const products = findByType(ctx.jsonLd, "Product");
+      const products = findByType(ctx.product.jsonLd, "Product");
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const offers = products.flatMap(getOffers);
       if (offers.length === 0) return { status: "skip", message: "No offers to check." };
@@ -103,7 +126,7 @@ export const productDataRules: Rule[] = [
     weight: 2,
     specUrl: "https://schema.org/gtin",
     check(ctx) {
-      const products = findByType(ctx.jsonLd, "Product");
+      const products = findByType(ctx.product.jsonLd, "Product");
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const idFields = ["gtin", "gtin8", "gtin12", "gtin13", "gtin14", "sku", "mpn"];
       const missing = products.filter((p) => !idFields.some((f) => p[f] !== undefined));
@@ -122,7 +145,7 @@ export const productDataRules: Rule[] = [
     weight: 1,
     specUrl: SCHEMA_SPEC,
     check(ctx) {
-      const products = findByType(ctx.jsonLd, "Product");
+      const products = findByType(ctx.product.jsonLd, "Product");
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const missingBrand = products.filter((p) => p.brand === undefined).length;
       const missingImage = products.filter((p) => p.image === undefined).length;
@@ -141,7 +164,7 @@ export const productDataRules: Rule[] = [
     weight: 2,
     specUrl: "https://schema.org/OfferShippingDetails",
     check(ctx) {
-      const products = findByType(ctx.jsonLd, "Product");
+      const products = findByType(ctx.product.jsonLd, "Product");
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const offers = products.flatMap(getOffers);
       if (offers.length === 0) return { status: "skip", message: "No offers to check." };
@@ -161,7 +184,7 @@ export const productDataRules: Rule[] = [
     weight: 2,
     specUrl: "https://schema.org/MerchantReturnPolicy",
     check(ctx) {
-      const products = findByType(ctx.jsonLd, "Product");
+      const products = findByType(ctx.product.jsonLd, "Product");
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const offers = products.flatMap(getOffers);
       if (offers.length === 0) return { status: "skip", message: "No offers to check." };

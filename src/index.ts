@@ -1,2 +1,2 @@
-export { runScan } from "./engine.js";
+export { scanStore, type CommerceScanOptions } from "./commerce/engine.js";
 export * from "./core/index.js";

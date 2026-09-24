@@ -1,16 +1,16 @@
-import type { Rule } from "../core/types.js";
+import type { CommerceContext, CommerceRule } from "../types.js";
 
-function linkTextIncludes(ctx: Parameters<Rule["check"]>[0], needles: string[]): boolean {
+function linkTextIncludes(ctx: CommerceContext, needles: string[]): boolean {
   let found = false;
-  ctx.$("a").each((_i, el) => {
-    const text = ctx.$(el).text().toLowerCase();
-    const href = (ctx.$(el).attr("href") ?? "").toLowerCase();
+  ctx.home.$("a").each((_i, el) => {
+    const text = ctx.home.$(el).text().toLowerCase();
+    const href = (ctx.home.$(el).attr("href") ?? "").toLowerCase();
     if (needles.some((n) => text.includes(n) || href.includes(n))) found = true;
   });
   return found;
 }
 
-export const trustSignalRules: Rule[] = [
+export const trustSignalRules: CommerceRule[] = [
   {
     id: "trust.https",
     category: "trust-signals",

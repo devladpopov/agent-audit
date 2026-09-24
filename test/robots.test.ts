@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isFullyBlocked, parseRobots } from "../src/fetch/robots.js";
+import { isFullyBlocked, parseRobots } from "../src/commerce/fetch/robots.js";
 
 describe("parseRobots + isFullyBlocked", () => {
   test("wildcard disallow-all blocks everything", () => {

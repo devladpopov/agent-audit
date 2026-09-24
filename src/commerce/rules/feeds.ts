@@ -1,4 +1,4 @@
-import type { Rule } from "../core/types.js";
+import type { CommerceRule } from "../types.js";
 
 const SITEMAP_PATHS = ["/sitemap.xml", "/sitemap_index.xml"];
 const FEED_PATHS = [
@@ -9,7 +9,7 @@ const FEED_PATHS = [
   "/feeds/products.xml",
 ];
 
-export const feedsRules: Rule[] = [
+export const feedsRules: CommerceRule[] = [
   {
     id: "feeds.sitemap-present",
     category: "feeds",
@@ -57,7 +57,7 @@ export const feedsRules: Rule[] = [
         const probe = await ctx.fetchText(path);
         if (probe.ok) return { status: "pass", message: `Product feed found at ${path}.` };
       }
-      const linked = ctx.$('link[type="application/rss+xml"], link[type="application/atom+xml"]').length > 0;
+      const linked = ctx.home.$('link[type="application/rss+xml"], link[type="application/atom+xml"]').length > 0;
       if (linked) {
         return { status: "warn", message: "A feed <link> tag exists, but not at a common product-feed path — could not confirm it's a product feed." };
       }
