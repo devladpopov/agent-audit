@@ -1,0 +1,49 @@
+{
+  "name": "agent-audit",
+  "version": "0.1.0",
+  "description": "Open-source readiness checker for agentic commerce: scores a storefront on UCP/ACP/AP2, structured product data, feeds, agent access, checkout and trust signals, with fixes linked to the specs. (Working name, pending final brand pick.)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "agent-audit": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./core": "./dist/core/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "bun run src/cli.ts",
+    "scan": "bun run src/cli.ts scan",
+    "test": "bun test",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "agentic-commerce",
+    "ucp",
+    "acp",
+    "ap2",
+    "ai-agents",
+    "ecommerce",
+    "readiness",
+    "audit",
+    "schema.org",
+    "lighthouse"
+  ]
+}

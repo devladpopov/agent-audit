@@ -1,0 +1,27 @@
+name: "Agent Readiness Audit"
+description: "Scores your storefront's readiness for AI shopping agents (UCP/ACP/AP2, structured data, feeds, access, checkout, trust) and fails CI below a threshold."
+branding:
+  icon: "check-circle"
+  color: "green"
+
+inputs:
+  url:
+    description: "Storefront URL to scan"
+    required: true
+  min-score:
+    description: "Fail the job if the overall score is below this value (0-100)"
+    required: false
+    default: "0"
+  format:
+    description: "Report format written to the job summary: text | markdown"
+    required: false
+    default: "markdown"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run agent-audit
+      shell: bash
+      run: |
+        npx --yes agent-audit scan "${{ inputs.url }}" --markdown --min-score "${{ inputs.min-score }}" --out report.md
+        cat report.md >> "$GITHUB_STEP_SUMMARY"
