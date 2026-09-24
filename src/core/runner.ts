@@ -10,6 +10,7 @@ export interface RunOptions<Ctx> {
   rules: Rule<Ctx>[];
   ctx: Ctx;
   errors?: string[];
+  metrics?: Record<string, number>;
 }
 
 /**
@@ -56,6 +57,7 @@ export async function runRules<Ctx>(opts: RunOptions<Ctx>): Promise<ScanResult> 
     grade,
     categories,
     findings,
+    ...(opts.metrics ? { metrics: opts.metrics } : {}),
     errors,
   };
 }

@@ -8,12 +8,22 @@ export type Status = "pass" | "warn" | "fail" | "info" | "skip";
 /** Impact of a failed check. Commerce rules mostly use medium/low; security scanners need the full range. */
 export type Severity = "critical" | "high" | "medium" | "low";
 
+/** Where a finding points in a source file (1-based). Used by file-oriented scanners (text linter, MCP code checks). */
+export interface SourceLocation {
+  file?: string;
+  line: number;
+  column: number;
+  endLine?: number;
+  endColumn?: number;
+}
+
 export interface RuleOutcome {
   status: Status;
   message: string;
   detail?: string;
   evidence?: string;
   fixSuggestion?: string;
+  location?: SourceLocation;
   /** Overrides the rule's default severity for this particular outcome. */
   severity?: Severity;
 }
@@ -72,5 +82,7 @@ export interface ScanResult {
   grade: Grade;
   categories: CategoryScore[];
   findings: Finding[];
+  /** Scanner-specific numbers shown next to the score, e.g. cliches per 1,000 words. */
+  metrics?: Record<string, number>;
   errors: string[];
 }
