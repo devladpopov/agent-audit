@@ -16,11 +16,16 @@ inputs:
     description: "Fail the job if the overall score is below this value (0-100)"
     required: false
     default: "0"
+  github-token:
+    description: "If set and this runs on a pull_request, posts/updates a PR comment with the report."
+    required: false
+    default: ""
 
 runs:
   using: "composite"
   steps:
     - name: Run agent-audit
+      id: scan
       shell: bash
       # Inputs go through env vars, never ${{ }} inside the script, so a crafted URL can't inject shell.
       env:
@@ -33,4 +38,30 @@ runs:
         status=0
         npx --yes agent-audit "${args[@]}" || status=$?
         cat report.md >> "$GITHUB_STEP_SUMMARY"
-        exit $status
+        echo "status=$status" >> "$GITHUB_OUTPUT"
+
+    # Runs even if the score was below min-score, so the PR gets the report either way; the job
+    # itself still fails via the final step below.
+    - name: Comment on the pull request
+      if: always() && inputs.github-token != '' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require("fs");
+          const body = fs.readFileSync("report.md", "utf8") + "\n\n<!-- agent-audit-report -->";
+          const { owner, repo } = context.repo;
+          const issue_number = context.issue.number;
+          const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+          const existing = comments.find((c) => c.body?.includes("<!-- agent-audit-report -->"));
+          if (existing) {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+          } else {
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+          }
+
+    - name: Enforce min-score
+      shell: bash
+      env:
+        AA_STATUS: ${{ steps.scan.outputs.status }}
+      run: exit "${AA_STATUS:-0}"

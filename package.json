@@ -20,6 +20,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "bun run src/cli.ts",
     "scan": "bun run src/cli.ts scan",
+    "web": "bun run src/web/server.ts",
+    "web:start": "node dist/web/server.js",
     "test": "bun test",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

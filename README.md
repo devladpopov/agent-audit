@@ -51,7 +51,22 @@ where one exists, instead of a generic "add JSON-LD" suggestion.
   with:
     url: https://example-store.com
     min-score: 70
+    github-token: ${{ secrets.GITHUB_TOKEN }}   # optional: posts/updates a PR comment with the report
 ```
+
+### Web version
+
+A minimal server: paste a URL, get the same report as the CLI, share the link, embed the badge.
+
+```bash
+bun run web            # from source, http://localhost:8787
+bun run build && bun run web:start   # from dist/
+```
+
+It fetches whatever URL a visitor submits, so it validates against SSRF before scanning (rejects
+`localhost`, private/link-local IPs including the cloud metadata address, non-http(s) schemes) —
+see `src/web/ssrf-guard.ts`. There's no persistence: a "share" link just re-runs the scan when
+opened, and `?format=json` / `?format=badge` are plain re-renders of the same result.
 
 ## Development
 
@@ -74,6 +89,8 @@ an MCP server trust scanner is planned next.
   paths and a product page once and builds the context; `rules/` has one file per category, each
   rule `{ id, category, weight, severity?, specUrl, check(ctx) }`.
 - `src/cli.ts`: `agent-audit <scanner> <target>` with shared output flags.
+- `src/web/`: a small Node HTTP server (`server.ts`) reusing `core/report.ts`'s HTML renderer, plus
+  an SSRF guard (`ssrf-guard.ts`) since it scans whatever URL a visitor submits.
 
 ## License
 

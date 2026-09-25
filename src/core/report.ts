@@ -1,4 +1,4 @@
-import type { ScanResult, Status } from "./types.js";
+import type { CategoryScore, Finding, ScanResult, Status } from "./types.js";
 
 const STATUS_ICON: Record<Status, string> = {
   pass: "✅",
@@ -80,4 +80,79 @@ export function toMarkdown(result: ScanResult): string {
     }
   }
   return lines.join("\n");
+}
+
+const STATUS_CLASS: Record<Status, string> = {
+  pass: "pass",
+  warn: "warn",
+  fail: "fail",
+  info: "info",
+  skip: "skip",
+};
+
+/** Minimal HTML-escaping: findings/messages can echo content from the scanned page (a store's own
+ * HTML, robots.txt, etc.), which is attacker-controlled input as far as the report renderer is
+ * concerned — never interpolate it into HTML unescaped. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function findingHtml(f: Finding): string {
+  const sev = f.severity && (f.status === "fail" || f.status === "warn") ? ` <span class="sev">${escapeHtml(f.severity)}</span>` : "";
+  const loc = locationText(f);
+  const parts = [
+    `<li class="finding ${STATUS_CLASS[f.status]}">`,
+    `<span class="icon">${STATUS_ICON[f.status]}</span> `,
+    loc ? `<code>${escapeHtml(loc.trim())}</code> ` : "",
+    `<strong>${escapeHtml(f.title)}</strong>${sev}: ${escapeHtml(f.message)}`,
+  ];
+  if (f.fixSuggestion) parts.push(`<div class="fix">Fix: ${escapeHtml(f.fixSuggestion)}</div>`);
+  if (f.specUrl) parts.push(`<div class="spec"><a href="${escapeHtml(f.specUrl)}" rel="noopener noreferrer">Spec</a></div>`);
+  parts.push("</li>");
+  return parts.join("");
+}
+
+function categoryHtml(cat: CategoryScore): string {
+  return [
+    `<section class="category">`,
+    `<h3>${escapeHtml(cat.label)}: <span class="score">${escapeHtml(scoreText(cat.score))}</span></h3>`,
+    `<ul class="findings">${cat.findings.map(findingHtml).join("")}</ul>`,
+    `</section>`,
+  ].join("");
+}
+
+/**
+ * A self-contained HTML fragment (no <html>/<body>) for the given result — the web version wraps
+ * it in a page, but it's plain enough to drop into any other page too. No external assets, no JS.
+ */
+export function toHtml(result: ScanResult): string {
+  const labels = result.target.labels;
+  const labelBadges = labels
+    ? Object.entries(labels).map(([k, v]) => `<span class="label">${escapeHtml(k)}: ${escapeHtml(v)}</span>`).join(" ")
+    : "";
+  const metrics = result.metrics
+    ? `<ul class="metrics">${Object.entries(result.metrics).map(([k, v]) => `<li>${escapeHtml(k)}: ${v}</li>`).join("")}</ul>`
+    : "";
+  const errors = result.errors.length
+    ? `<div class="errors"><strong>Errors:</strong><ul>${result.errors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul></div>`
+    : "";
+  return [
+    `<div class="agent-audit-report">`,
+    `<header>`,
+    `<p class="target">${escapeHtml(result.tool)} ${escapeHtml(result.scanner)} report for <a href="${escapeHtml(result.target.resolved)}" rel="noopener noreferrer">${escapeHtml(result.target.resolved)}</a> ${labelBadges}</p>`,
+    `<p class="overall">Overall score: <strong>${result.overallScore}/100</strong> (grade ${escapeHtml(result.grade)})</p>`,
+    metrics,
+    `</header>`,
+    `<table class="category-table"><thead><tr><th>Category</th><th>Score</th></tr></thead><tbody>`,
+    result.categories.map((c) => `<tr><td>${escapeHtml(c.label)}</td><td>${escapeHtml(scoreText(c.score))}</td></tr>`).join(""),
+    `</tbody></table>`,
+    result.categories.map(categoryHtml).join(""),
+    errors,
+    `</div>`,
+  ].join("\n");
 }
