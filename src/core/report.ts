@@ -19,6 +19,12 @@ function metricsLines(result: ScanResult): string[] {
   return Object.entries(result.metrics).map(([k, v]) => `${k}: ${v}`);
 }
 
+function labelsText(result: ScanResult): string {
+  const labels = result.target.labels;
+  if (!labels || Object.keys(labels).length === 0) return "";
+  return ` (${Object.entries(labels).map(([k, v]) => `${k}: ${v}`).join(", ")})`;
+}
+
 function scoreText(score: number | null): string {
   return score === null ? "not assessed" : `${score}/100`;
 }
@@ -30,7 +36,7 @@ export function toJson(result: ScanResult): string {
 /** Human-readable terminal/CI report. Kept dependency-free so it also works inside a GitHub Action log. */
 export function toText(result: ScanResult): string {
   const lines: string[] = [];
-  lines.push(`${result.tool} ${result.scanner} v${result.toolVersion}: ${result.target.resolved}`);
+  lines.push(`${result.tool} ${result.scanner} v${result.toolVersion}: ${result.target.resolved}${labelsText(result)}`);
   lines.push(`Overall score: ${result.overallScore}/100 (grade ${result.grade})`);
   lines.push(...metricsLines(result));
   lines.push("");
@@ -54,7 +60,7 @@ export function toText(result: ScanResult): string {
 /** Markdown report, suitable for a PR comment (GitHub Action) or the web report page. */
 export function toMarkdown(result: ScanResult): string {
   const lines: string[] = [];
-  lines.push(`## ${result.tool} ${result.scanner} report for ${result.target.resolved}`);
+  lines.push(`## ${result.tool} ${result.scanner} report for ${result.target.resolved}${labelsText(result)}`);
   lines.push("");
   lines.push(`**Overall score: ${result.overallScore}/100 (grade ${result.grade})**`);
   for (const m of metricsLines(result)) lines.push(`- ${m}`);

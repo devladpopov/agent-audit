@@ -48,23 +48,26 @@ program
   .description("Open-source audits for the agent ecosystem.")
   .version(TOOL_VERSION);
 
-const shopAction = async (url: string, opts: OutputOptions & { productUrl?: string }) => {
-  const result = await scanStore(url, { productUrl: opts.productUrl });
+const shopAction = async (url: string, opts: OutputOptions & { productUrl?: string; productSamples?: number }) => {
+  const result = await scanStore(url, { productUrl: opts.productUrl, maxProductSamples: opts.productSamples });
   emit(result, opts, "agent readiness");
 };
 
-withOutputOptions(
+function withShopOptions(cmd: Command): Command {
+  return withOutputOptions(cmd)
+    .option("--product-url <url>", "Product page to use for product-data checks (default: auto-discover)")
+    .option("--product-samples <n>", "Discovered product pages to sample; reports the median (default 3)", (v) =>
+      Number.parseInt(v, 10),
+    );
+}
+
+withShopOptions(
   program
     .command("shop <url>")
-    .description("Score a storefront's readiness for AI shopping agents (UCP/ACP/AP2, product data, feeds, access, trust)")
-    .option("--product-url <url>", "Product page to use for product-data checks (default: auto-discover)"),
+    .description("Score a storefront's readiness for AI shopping agents (UCP/ACP/AP2, product data, feeds, access, trust)"),
 ).action(shopAction);
 
 // Backwards-compatible alias from the first scaffold.
-withOutputOptions(
-  program
-    .command("scan <url>", { hidden: true })
-    .option("--product-url <url>", "Product page to use for product-data checks"),
-).action(shopAction);
+withShopOptions(program.command("scan <url>", { hidden: true })).action(shopAction);
 
 program.parseAsync(process.argv);

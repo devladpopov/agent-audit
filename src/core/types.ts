@@ -68,6 +68,8 @@ export interface ScanTarget {
   kind: string;
   input: string;
   resolved: string;
+  /** Free-form scanner-specific tags, e.g. { platform: "woocommerce" }. Shown in reports, kept out of scoring. */
+  labels?: Record<string, string>;
 }
 
 export type Grade = "A" | "B" | "C" | "D" | "F";

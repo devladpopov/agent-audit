@@ -1,7 +1,11 @@
 import { BROWSER_HEADERS, fetchUrl, joinPath } from "../core/http.js";
 import { runRules } from "../core/runner.js";
-import type { ScanResult } from "../core/types.js";
+import { scoreCategory } from "../core/scorer.js";
+import type { Finding, ScanResult } from "../core/types.js";
 import { extractJsonLd, findByType, loadHtml } from "./fetch/html.js";
+import { platformFix } from "./platform-fixes.js";
+import { detectPlatform } from "./platform.js";
+import { productDataRules } from "./rules/product-data.js";
 import { ALL_RULES } from "./rules/index.js";
 import { COMMERCE_CATEGORIES, type CommerceContext, type PageSnapshot, type WellKnownProbe } from "./types.js";
 
@@ -11,6 +15,30 @@ export const TOOL_VERSION = "0.1.0";
 export interface CommerceScanOptions {
   /** Explicit product page to use for product-data checks (skips discovery). */
   productUrl?: string;
+  /** Max number of discovered product pages to sample for the median product-data score (default 3). */
+  maxProductSamples?: number;
+}
+
+const PRODUCT_DATA_CATEGORY = COMMERCE_CATEGORIES.find((c) => c.id === "product-data")!;
+
+/** Runs only the product-data rules against one page. Used to compare candidate product pages
+ * before picking which one the report is built from; not part of the reported findings itself. */
+async function scoreProductPage(ctx: CommerceContext): Promise<number> {
+  const findings: Finding[] = [];
+  for (const rule of productDataRules) {
+    try {
+      const outcome = await rule.check(ctx);
+      findings.push({ id: rule.id, category: rule.category, title: rule.title, weight: rule.weight, ...outcome });
+    } catch {
+      findings.push({ id: rule.id, category: rule.category, title: rule.title, weight: rule.weight, status: "skip", message: "" });
+    }
+  }
+  return scoreCategory(PRODUCT_DATA_CATEGORY, findings).score ?? 0;
+}
+
+/** Lower-of-two-middles median index, so picking among 2 candidates is deterministic. */
+function medianIndex(n: number): number {
+  return Math.floor((n - 1) / 2);
 }
 
 /** URL shapes that almost always mean a single product (WooCommerce, OpenCart, many custom stores). */
@@ -162,18 +190,33 @@ export async function scanStore(inputUrl: string, opts: CommerceScanOptions = {}
     return probe;
   };
 
-  let product = home;
-  let productSource: CommerceContext["productSource"] = "homepage-fallback";
+  const ctx: CommerceContext = {
+    inputUrl: normalizedUrl,
+    finalUrl: page.finalUrl,
+    statusCode: page.status ?? 0,
+    home,
+    product: home,
+    productSource: "homepage-fallback",
+    access: { toolStatus: toolPage.status, browserStatus, usedBrowserFallback: headers !== undefined },
+    headers: page.headers,
+    robotsTxt: { fetched: robotsOk, body: robotsOk ? robotsRes.body : null },
+    wellKnown,
+    fetchText,
+  };
+
+  const metrics: Record<string, number> = {};
+  const maxSamples = opts.maxProductSamples ?? 3;
+
   if (opts.productUrl) {
     const res = await fetchUrl(opts.productUrl, headers);
     if (res.ok && res.body) {
-      product = snapshot(res.finalUrl, res.body);
-      productSource = "user";
+      ctx.product = snapshot(res.finalUrl, res.body);
+      ctx.productSource = "user";
     } else {
       errors.push(`Failed to fetch --product-url ${opts.productUrl}: ${res.error ?? res.status}`);
     }
   } else if (hasProduct(home)) {
-    productSource = "input";
+    ctx.productSource = "input";
   } else {
     // Sitemap product entries are the most reliable, then ranked links from the home page.
     const fromSitemap = await productLinksFromSitemap(fetchText, headers);
@@ -183,44 +226,60 @@ export async function scanStore(inputUrl: string, opts: CommerceScanOptions = {}
     const fromLinks = productLinksFromPage(home);
     const trusted = new Set([...fromSitemap.slice(0, 2), ...fromLinks.filter((l) => isStrongProductUrl(new URL(l)))]);
     const candidates = [...new Set([...fromSitemap.slice(0, 2), ...fromLinks])];
+    const validPages: PageSnapshot[] = [];
     for (const url of candidates.slice(0, MAX_PRODUCT_CANDIDATES)) {
+      if (validPages.length >= maxSamples) break;
       const res = await fetchUrl(url, headers);
       if (!res.ok || !res.body || !(res.headers["content-type"] ?? "").includes("html")) continue;
       const snap = snapshot(res.finalUrl, res.body);
       // Only accept a page that declares itself a product (JSON-LD, microdata or og:type);
       // otherwise product-data results would describe a category page.
-      if (hasProduct(snap) || isOgProduct(snap) || trusted.has(url)) {
-        product = snap;
-        productSource = "discovered";
-        break;
-      }
+      if (hasProduct(snap) || isOgProduct(snap) || trusted.has(url)) validPages.push(snap);
+    }
+
+    if (validPages.length === 1) {
+      ctx.product = validPages[0]!;
+      ctx.productSource = "discovered";
+    } else if (validPages.length > 1) {
+      // Different product pages on the same store can score very differently (one merchant fills
+      // in returns/shipping on their bestseller and nowhere else). Sample a few and report the
+      // median instead of whichever page discovery happened to try first.
+      const scored = await Promise.all(
+        validPages.map(async (p) => ({ page: p, score: await scoreProductPage({ ...ctx, product: p, productSource: "discovered" }) })),
+      );
+      scored.sort((a, b) => a.score - b.score);
+      const median = scored[medianIndex(scored.length)]!;
+      ctx.product = median.page;
+      ctx.productSource = "discovered";
+      metrics.productPagesSampled = scored.length;
+      metrics.productDataScoreMin = scored[0]!.score;
+      metrics.productDataScoreMedian = median.score;
+      metrics.productDataScoreMax = scored[scored.length - 1]!.score;
     }
   }
 
-  const ctx: CommerceContext = {
-    inputUrl: normalizedUrl,
-    finalUrl: page.finalUrl,
-    statusCode: page.status ?? 0,
-    home,
-    product,
-    productSource,
-    access: { toolStatus: toolPage.status, browserStatus, usedBrowserFallback: headers !== undefined },
-    headers: page.headers,
-    robotsTxt: { fetched: robotsOk, body: robotsOk ? robotsRes.body : null },
-    wellKnown,
-    fetchText,
-  };
+  const platform = detectPlatform(home, page.headers);
 
-  return runRules({
+  const result = await runRules({
     tool: TOOL_NAME,
     toolVersion: TOOL_VERSION,
     scanner: "shop",
-    target: { kind: "store", input: inputUrl, resolved: page.finalUrl },
+    target: { kind: "store", input: inputUrl, resolved: page.finalUrl, labels: { platform: platform.platform } },
     categories: COMMERCE_CATEGORIES,
     // When the store refuses both a bot and a browser there is nothing meaningful to check;
     // report only the reachability failure instead of cascading dozens of misleading "missing" findings.
     rules: page.ok ? ALL_RULES : ALL_RULES.filter((r) => r.id === "agent-access.reachable"),
     ctx,
     errors,
+    metrics: Object.keys(metrics).length > 0 ? metrics : undefined,
   });
+
+  // Swap in a platform-specific recipe where we have one; the generic fix stays otherwise.
+  for (const finding of result.findings) {
+    if (finding.status !== "fail" && finding.status !== "warn") continue;
+    const fix = platformFix(finding.id, platform.platform);
+    if (fix) finding.fixSuggestion = fix;
+  }
+
+  return result;
 }

@@ -34,10 +34,15 @@ npx agent-audit shop https://example-store.com --markdown
 npx agent-audit shop https://example-store.com --min-score 70   # CI gate: non-zero exit if below
 ```
 
-The scanner checks the home page, `robots.txt`, well-known paths, and one product page. It finds
-the product page itself (product sitemaps, product-card links); pass `--product-url` if it picks
-the wrong one. Categories that can't be measured from outside (checkout, for now) show as
-"not assessed" and don't count toward the score.
+The scanner checks the home page, `robots.txt`, well-known paths, and product pages it finds itself
+(product sitemaps, product-card links) — pass `--product-url` if it picks the wrong one. Product
+data often varies between products on the same store, so by default it samples up to 3 discovered
+pages and reports the median (`--product-samples <n>` to change that). Categories that can't be
+measured from outside (checkout, for now) show as "not assessed" and don't count toward the score.
+
+The report also detects the storefront platform (WooCommerce, Magento, PrestaShop, OpenCart,
+Shopify) and swaps in a platform-specific fix — a plugin, setting or code snippet — for the checks
+where one exists, instead of a generic "add JSON-LD" suggestion.
 
 ### GitHub Action
 
