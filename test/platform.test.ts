@@ -11,38 +11,38 @@ function page(html: string): PageSnapshot {
 describe("detectPlatform", () => {
   test("woocommerce", () => {
     const html = '<html><body class="woocommerce"><script src="/wp-content/plugins/woocommerce/x.js"></script></body></html>';
-    expect(detectPlatform(page(html), {}).platform).toBe("woocommerce");
+    expect(detectPlatform([page(html)], {}).platform).toBe("woocommerce");
   });
 
   test("magento via header", () => {
-    expect(detectPlatform(page("<html></html>"), { "X-Magento-Varnish-Pool": "x" }).platform).toBe("magento");
+    expect(detectPlatform([page("<html></html>")], { "X-Magento-Varnish-Pool": "x" }).platform).toBe("magento");
   });
 
   test("magento via form_key", () => {
-    expect(detectPlatform(page('<input name="form_key" value="abc">'), {}).platform).toBe("magento");
+    expect(detectPlatform([page('<input name="form_key" value="abc">')], {}).platform).toBe("magento");
   });
 
   test("prestashop", () => {
-    expect(detectPlatform(page('<body id="product" data-id_product="42">'), {}).platform).toBe("prestashop");
+    expect(detectPlatform([page('<body id="product" data-id_product="42">')], {}).platform).toBe("prestashop");
   });
 
   test("opencart", () => {
-    expect(detectPlatform(page('<link href="/catalog/view/theme/default/stylesheet/style.css">'), {}).platform).toBe(
+    expect(detectPlatform([page('<link href="/catalog/view/theme/default/stylesheet/style.css">')], {}).platform).toBe(
       "opencart",
     );
   });
 
   test("shopify", () => {
-    expect(detectPlatform(page('<script src="https://cdn.shopify.com/s/files/x.js"></script>'), {}).platform).toBe(
+    expect(detectPlatform([page('<script src="https://cdn.shopify.com/s/files/x.js"></script>')], {}).platform).toBe(
       "shopify",
     );
   });
 
   test("falls back to other", () => {
-    expect(detectPlatform(page("<html><body>Hand-rolled store</body></html>"), {}).platform).toBe("other");
+    expect(detectPlatform([page("<html><body>Hand-rolled store</body></html>")], {}).platform).toBe("other");
   });
 
   test("never throws on hostile input", () => {
-    expect(() => detectPlatform(page(""), {})).not.toThrow();
+    expect(() => detectPlatform([page("")], {})).not.toThrow();
   });
 });

@@ -45,14 +45,20 @@ export interface PlatformDetection {
   evidence?: string;
 }
 
-/** Best-effort fingerprint from the home page + response headers. Never throws. */
-export function detectPlatform(home: PageSnapshot, headers: Record<string, string>): PlatformDetection {
+/**
+ * Best-effort fingerprint from one or more pages (home page, and ideally a product page too —
+ * some CDNs/caches strip plugin markers like "woocommerce" from the cached home page but not from
+ * product pages) plus response headers. Never throws.
+ */
+export function detectPlatform(pages: PageSnapshot[], headers: Record<string, string>): PlatformDetection {
   const lowerHeaders = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
   for (const signal of SIGNALS) {
-    try {
-      if (signal.test(home, lowerHeaders)) return { platform: signal.platform, evidence: signal.evidence };
-    } catch {
-      // a signal misfiring must never break the scan
+    for (const page of pages) {
+      try {
+        if (signal.test(page, lowerHeaders)) return { platform: signal.platform, evidence: signal.evidence };
+      } catch {
+        // a signal misfiring must never break the scan
+      }
     }
   }
   return { platform: "other" };

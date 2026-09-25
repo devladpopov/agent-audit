@@ -258,7 +258,7 @@ export async function scanStore(inputUrl: string, opts: CommerceScanOptions = {}
     }
   }
 
-  const platform = detectPlatform(home, page.headers);
+  const platform = detectPlatform([home, ctx.product], page.headers);
 
   const result = await runRules({
     tool: TOOL_NAME,
