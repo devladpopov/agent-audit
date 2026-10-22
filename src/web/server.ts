@@ -4,6 +4,8 @@ import { toHtml, toJson, toSvgBadge } from "../core/index.js";
 import { checkPublicUrl } from "./ssrf-guard.js";
 
 const PORT = Number.parseInt(process.env.PORT ?? "8787", 10);
+// Set to 127.0.0.1 behind a reverse proxy; unset listens on all interfaces.
+const HOST = process.env.HOST;
 const SCAN_TIMEOUT_MS = 30_000;
 
 function page(body: string): string {
@@ -139,6 +141,6 @@ const server = createServer((req: IncomingMessage, res: ServerResponse) => {
   res.writeHead(404, { "content-type": "text/plain" }).end("Not found");
 });
 
-server.listen(PORT, () => {
-  console.log(`agent-audit web listening on http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`agent-audit web listening on http://${HOST ?? "localhost"}:${PORT}`);
 });

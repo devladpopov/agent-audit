@@ -1,16 +1,45 @@
 # agent-audit
 
-Open-source readiness checker for **agentic commerce**. Point it at a storefront URL and get a
-0-100 score, broken down by category, with concrete fixes linked to the relevant spec —
-similar in spirit to Lighthouse, but for AI shopping agents instead of browsers.
+[![npm](https://img.shields.io/npm/v/@devladpopov/agent-audit)](https://www.npmjs.com/package/@devladpopov/agent-audit)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![web version](https://img.shields.io/badge/web-scan%20your%20store-2ea44f)](https://agent-audit.globalmindsetmarketing.co.uk/)
 
-Built for merchants who aren't on Shopify (WooCommerce, Magento/Adobe Commerce, PrestaShop,
-OpenCart, custom stacks) and therefore don't get UCP/ACP support "for free" from their platform.
+**Lighthouse for AI shopping agents: one command tells you whether an AI agent can find, read and
+buy from your store.**
 
-> Early release. The checks and scoring are real and tested, but the pilot run was on a small,
-> hand-picked set of stores (not a random sample) — see the roadmap below before quoting numbers
-> from it. Issues and PRs welcome, especially a fix recipe for a platform/check combination this
-> doesn't cover yet.
+**We scanned 35 stores: average AI-agent readiness 73.7/100, here is what breaks.**
+
+```bash
+npx @devladpopov/agent-audit shop https://your-store.com
+```
+
+Or paste a URL into the web version: **https://agent-audit.globalmindsetmarketing.co.uk**
+
+Point it at a storefront and get a 0-100 score, broken down by category, with concrete fixes
+linked to the relevant spec (UCP, ACP, AP2, schema.org). Built for merchants who aren't on Shopify
+(WooCommerce, Magento/Adobe Commerce, PrestaShop, OpenCart, custom stacks) and therefore don't get
+UCP/ACP support "for free" from their platform.
+
+## What breaks (35 stores, September 2026)
+
+32 of 35 stores were reachable; the other 3 returned 403 to an identified bot. Across the 32:
+
+| Finding | Stores |
+|---|---|
+| Publish a UCP manifest at `/.well-known/ucp` | 0 of 32 |
+| Product page has a usable schema.org `Product` node | 17 of 32 |
+| ...of those, `Offer` includes `shippingDetails` | 2 of 17 |
+| ...of those, `Offer` includes a return policy | 2 of 17 |
+| Have an `llms.txt` | 4 of 32 |
+| Show a captcha / anti-bot wall to an identified agent | 9 of 32 |
+| Block AI agents in `robots.txt` | 0 of 32 |
+
+The gap isn't access, it's data: agents can get in, but half the product pages don't say what the
+product is, and almost none say what delivery and returns cost. By platform (n is small):
+custom 78, OpenCart 76, Magento 76 (n=1), WooCommerce 72, PrestaShop 71.
+
+The sample is hand-picked from platform showcases and agency portfolios, not random. The
+anonymized per-store scores and the method are in [`data/`](data/).
 
 ## What it checks
 
@@ -30,12 +59,14 @@ Every finding links to the spec it's based on: [UCP](https://github.com/Universa
 ## Usage
 
 ```bash
-npx agent-audit shop https://example-store.com
-npx agent-audit shop https://example-store.com --product-url https://example-store.com/product/blue-mug
-npx agent-audit shop https://example-store.com --json
-npx agent-audit shop https://example-store.com --markdown
-npx agent-audit shop https://example-store.com --min-score 70   # CI gate: non-zero exit if below
+npx @devladpopov/agent-audit shop https://example-store.com
+npx @devladpopov/agent-audit shop https://example-store.com --product-url https://example-store.com/product/blue-mug
+npx @devladpopov/agent-audit shop https://example-store.com --json
+npx @devladpopov/agent-audit shop https://example-store.com --markdown
+npx @devladpopov/agent-audit shop https://example-store.com --min-score 70   # CI gate: non-zero exit if below
 ```
+
+Installed globally (`npm i -g @devladpopov/agent-audit`) the command is just `agent-audit`.
 
 The scanner checks the home page, `robots.txt`, well-known paths, and product pages it finds itself
 (product sitemaps, product-card links) — pass `--product-url` if it picks the wrong one. Product
@@ -59,7 +90,14 @@ where one exists, instead of a generic "add JSON-LD" suggestion.
 
 ### Web version
 
-A minimal server: paste a URL, get the same report as the CLI, share the link, embed the badge.
+Hosted at **https://agent-audit.globalmindsetmarketing.co.uk**: paste a URL, get the same report
+as the CLI, share the link, embed the badge in your own README or site:
+
+```markdown
+![agent readiness](https://agent-audit.globalmindsetmarketing.co.uk/report?url=https://your-store.com&format=badge)
+```
+
+To self-host it:
 
 ```bash
 bun run web            # from source, http://localhost:8787
@@ -98,9 +136,7 @@ an MCP server trust scanner is planned next.
 ## Roadmap
 
 - Checkout readiness needs a browser-driven cart/checkout crawl; it's "not assessed" until then.
-- The pilot dataset (`research/`) isn't published here — it's a convenience sample (platform
-  showcases and agency portfolios, not a random crawl) and shouldn't be quoted as "X% of stores
-  are..." without a proper random sample per platform first.
+- A larger, random sample per platform, so the numbers above can be quoted as "X% of stores".
 - MCP server trust scanner and an AI-cliche text linter are planned as siblings on this engine.
 
 ## Contributing
