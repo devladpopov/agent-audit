@@ -39,7 +39,7 @@ function page(body: string): string {
 ${body}
 <footer>
   <p>CLI: <code>npx agent-audit shop &lt;url&gt;</code> &middot;
-  <a href="https://github.com/devladpopov/agent-audit">source (not yet published)</a></p>
+  <a href="https://github.com/devladpopov/agent-audit">source</a></p>
 </footer>
 </body>
 </html>`;

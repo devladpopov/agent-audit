@@ -1,4 +1,4 @@
-# agent-audit *(working name — pending final brand)*
+# agent-audit
 
 Open-source readiness checker for **agentic commerce**. Point it at a storefront URL and get a
 0-100 score, broken down by category, with concrete fixes linked to the relevant spec —
@@ -7,7 +7,10 @@ similar in spirit to Lighthouse, but for AI shopping agents instead of browsers.
 Built for merchants who aren't on Shopify (WooCommerce, Magento/Adobe Commerce, PrestaShop,
 OpenCart, custom stacks) and therefore don't get UCP/ACP support "for free" from their platform.
 
-> Status: early scaffold, not yet published. See `CHECKPOINT.md` for current state.
+> Early release. The checks and scoring are real and tested, but the pilot run was on a small,
+> hand-picked set of stores (not a random sample) — see the roadmap below before quoting numbers
+> from it. Issues and PRs welcome, especially a fix recipe for a platform/check combination this
+> doesn't cover yet.
 
 ## What it checks
 
@@ -47,7 +50,7 @@ where one exists, instead of a generic "add JSON-LD" suggestion.
 ### GitHub Action
 
 ```yaml
-- uses: devladpopov/agent-audit@v0   # placeholder until published
+- uses: devladpopov/agent-audit@v0.1.0
   with:
     url: https://example-store.com
     min-score: 70
@@ -92,6 +95,19 @@ an MCP server trust scanner is planned next.
 - `src/web/`: a small Node HTTP server (`server.ts`) reusing `core/report.ts`'s HTML renderer, plus
   an SSRF guard (`ssrf-guard.ts`) since it scans whatever URL a visitor submits.
 
+## Roadmap
+
+- Checkout readiness needs a browser-driven cart/checkout crawl; it's "not assessed" until then.
+- The pilot dataset (`research/`) isn't published here — it's a convenience sample (platform
+  showcases and agency portfolios, not a random crawl) and shouldn't be quoted as "X% of stores
+  are..." without a proper random sample per platform first.
+- MCP server trust scanner and an AI-cliche text linter are planned as siblings on this engine.
+
+## Contributing
+
+Issues and PRs welcome — a new rule, a fix recipe for a platform/check pair not covered yet
+(see `src/commerce/platform-fixes.ts`), or a report from running it against your own store.
+
 ## License
 
-Apache-2.0 (see `LICENSE`) — pending final confirmation before publication.
+Apache-2.0, see `LICENSE`.
