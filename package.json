@@ -1,6 +1,6 @@
 {
   "name": "@devladpopov/agent-audit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Open-source readiness checker for agentic commerce: scores a storefront on UCP/ACP/AP2, structured product data, feeds, agent access, checkout and trust signals, with fixes linked to the specs.",
   "license": "Apache-2.0",
   "type": "module",

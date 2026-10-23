@@ -10,7 +10,7 @@ import { ALL_RULES } from "./rules/index.js";
 import { COMMERCE_CATEGORIES, type CommerceContext, type PageSnapshot, type WellKnownProbe } from "./types.js";
 
 export const TOOL_NAME = "agent-audit";
-export const TOOL_VERSION = "0.1.0";
+export const TOOL_VERSION = "0.1.1";
 
 export interface CommerceScanOptions {
   /** Explicit product page to use for product-data checks (skips discovery). */
