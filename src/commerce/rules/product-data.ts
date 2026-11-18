@@ -1,5 +1,5 @@
 import type { CommerceRule } from "../types.js";
-import { findProducts } from "../fetch/html.js";
+import { findByType, findProducts } from "../fetch/html.js";
 
 const SCHEMA_SPEC = "https://schema.org/Product";
 
@@ -197,4 +197,127 @@ export const productDataRules: CommerceRule[] = [
       };
     },
   },
+  {
+    id: "product-data.gtin-valid",
+    category: "product-data",
+    title: "GTINs pass the GS1 check digit",
+    weight: 2,
+    specUrl: "https://www.gs1.org/services/how-calculate-check-digit-manually",
+    check(ctx) {
+      const values = collectGtins(ctx.product.jsonLd);
+      if (values.length === 0) return { status: "skip", message: "No gtin/gtin8/gtin12/gtin13/gtin14 value to check." };
+      const invalid = values.filter((v) => !isValidGtin(v.value));
+      if (invalid.length === 0) return { status: "pass", message: `${values.length} GTIN(s) with a valid check digit.` };
+      return {
+        status: "fail",
+        message: `${invalid.length}/${values.length} GTIN(s) are not valid GS1 numbers: ${invalid
+          .slice(0, 3)
+          .map((v) => `${v.field}="${v.value}"`)
+          .join(", ")}. Agents and merchant feeds reject or mismatch products with a bad GTIN.`,
+        fixSuggestion: "Use the full 8/12/13/14-digit GTIN from your GS1 allocation, digits only. If a product has no GTIN, omit the field and use sku/mpn instead of a placeholder.",
+      };
+    },
+  },
+  {
+    id: "product-data.variants",
+    category: "product-data",
+    title: "Variants are modelled as a ProductGroup",
+    weight: 1,
+    specUrl: "https://developers.google.com/search/docs/appearance/structured-data/product-variants",
+    check(ctx) {
+      const groups = findByType(ctx.product.jsonLd, "ProductGroup");
+      const products = findByType(ctx.product.jsonLd, "Product");
+      if (groups.length === 0 && products.length === 0) return { status: "skip", message: "No Product or ProductGroup node to check." };
+      const variantCount = groups.reduce((n, g) => n + asArray(g.hasVariant).length, 0);
+      if (variantCount > 0) {
+        const variesBy = [...new Set(groups.flatMap((g) => asArray(g.variesBy).map((v) => String(v).replace(/^https?:\/\/schema\.org\//, ""))))];
+        return {
+          status: "pass",
+          message: `ProductGroup with ${variantCount} variant(s)${variesBy.length > 0 ? `, varies by ${variesBy.join(", ")}` : ""}.`,
+        };
+      }
+      if (products.some((p) => p.isVariantOf !== undefined)) {
+        return { status: "pass", message: "Product links to its ProductGroup with isVariantOf." };
+      }
+      const offerCount = products.flatMap(getOffers).reduce((n, o) => {
+        const declared = Number(o.offerCount);
+        return n + (o["@type"] === "AggregateOffer" && declared > 1 ? declared : 1);
+      }, 0);
+      if (products.length > 1 || offerCount > 1) {
+        return {
+          status: "info",
+          message: `${products.length} Product node(s) with ${offerCount} offer(s) but no ProductGroup, so agents can't tell which size/colour each offer is.`,
+          fixSuggestion: "Wrap variants in a ProductGroup with productGroupID, variesBy and hasVariant (one Product per SKU with its own offer).",
+        };
+      }
+      return { status: "info", message: "Single product with one offer; no variants declared." };
+    },
+  },
+  {
+    id: "product-data.reviews",
+    category: "product-data",
+    title: "Product exposes ratings or reviews",
+    weight: 1,
+    specUrl: "https://schema.org/AggregateRating",
+    check(ctx) {
+      const products = [...findByType(ctx.product.jsonLd, "Product"), ...findByType(ctx.product.jsonLd, "ProductGroup")];
+      if (products.length === 0) return { status: "skip", message: "No Product node to check." };
+      const rated = products.find((p) => p.aggregateRating !== undefined || p.review !== undefined);
+      if (rated) {
+        const rating = rated.aggregateRating as Record<string, unknown> | undefined;
+        const count = rating?.reviewCount ?? rating?.ratingCount;
+        return {
+          status: "pass",
+          message:
+            rating?.ratingValue !== undefined
+              ? `aggregateRating ${rating.ratingValue}${count !== undefined ? ` from ${count} review(s)` : ""}.`
+              : "Product declares review(s).",
+        };
+      }
+      return {
+        status: "warn",
+        message: "No aggregateRating or review on the Product. Agents comparing options across stores fall back to other sites' ratings, or skip the product.",
+        fixSuggestion: "Emit aggregateRating (ratingValue, reviewCount) from your reviews app in the Product JSON-LD, only for genuine on-site reviews.",
+      };
+    },
+  },
 ];
+
+const GTIN_FIELDS = ["gtin", "gtin8", "gtin12", "gtin13", "gtin14"];
+
+/** GTIN values on every Product, ProductGroup variant and Offer in the page's JSON-LD. */
+function collectGtins(jsonLd: unknown[]): { field: string; value: string }[] {
+  const nodes: Record<string, unknown>[] = [];
+  const products = findByType(jsonLd, "Product");
+  for (const g of findByType(jsonLd, "ProductGroup")) {
+    nodes.push(g);
+    products.push(...asArray(g.hasVariant).filter((v): v is Record<string, unknown> => !!v && typeof v === "object"));
+  }
+  for (const p of new Set(products)) nodes.push(p, ...getOffers(p));
+  const out: { field: string; value: string }[] = [];
+  for (const node of nodes) {
+    for (const field of GTIN_FIELDS) {
+      const raw = node[field];
+      if (typeof raw === "string" || typeof raw === "number") {
+        const value = String(raw).trim();
+        if (value) out.push({ field, value });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * GS1 check-digit test for GTIN-8/12/13/14. Spaces and hyphens are tolerated; a GS1 Digital Link
+ * URL (".../01/<gtin14>") is checked on its embedded GTIN, since schema.org allows that form.
+ */
+export function isValidGtin(raw: string): boolean {
+  const link = /\/01\/(\d{8,14})(?:[/?#]|$)/.exec(raw);
+  const digits = link ? link[1]! : raw.replace(/[\s-]/g, "");
+  // All zeros passes the arithmetic but is a common placeholder, not a real allocation.
+  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(digits) || /^0+$/.test(digits)) return false;
+  // Weights alternate 3,1,3,... from the rightmost digit before the check digit.
+  let sum = 0;
+  for (let i = digits.length - 2, w = 3; i >= 0; i--, w = w === 3 ? 1 : 3) sum += Number(digits[i]) * w;
+  return (10 - (sum % 10)) % 10 === Number(digits[digits.length - 1]);
+}

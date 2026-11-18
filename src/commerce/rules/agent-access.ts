@@ -1,8 +1,30 @@
-import type { CommerceRule } from "../types.js";
-import { AGENT_USER_AGENTS, isFullyBlocked, parseRobots } from "../fetch/robots.js";
+import type { CommerceContext, CommerceRule } from "../types.js";
+import {
+  AGENT_USER_AGENTS,
+  TRAINING_AGENTS,
+  USER_TRIGGERED_AGENTS,
+  isFullyBlocked,
+  isPathAllowed,
+  parseContentSignals,
+  parseRobots,
+} from "../fetch/robots.js";
 import { visibleTextLength } from "../fetch/html.js";
 
 const CAPTCHA_MARKERS = ["cf-challenge", "g-recaptcha", "hcaptcha", "cf_chl_opt", "px-captcha"];
+
+/** Paths an agent needs to reach to shop: the home page and the product page the report is built from. */
+function shoppingPaths(ctx: CommerceContext): string[] {
+  const paths = new Set<string>();
+  for (const url of [ctx.finalUrl, ctx.product.url]) {
+    try {
+      const u = new URL(url);
+      paths.add(u.pathname + u.search);
+    } catch {
+      // ignore unparsable URLs
+    }
+  }
+  return [...paths];
+}
 
 export const agentAccessRules: CommerceRule[] = [
   {
@@ -49,6 +71,78 @@ export const agentAccessRules: CommerceRule[] = [
         message: `robots.txt fully blocks: ${blocked.join(", ")}.`,
         fixSuggestion: `Remove or scope the "Disallow: /" rule for ${blocked.join(", ")} in robots.txt if you want these agents to see your catalog.`,
       };
+    },
+  },
+  {
+    id: "agent-access.ai-agent-policy",
+    category: "agent-access",
+    title: "robots.txt lets live AI shopping/answer agents reach product pages",
+    weight: 3,
+    specUrl: "https://www.rfc-editor.org/rfc/rfc9309.html",
+    check(ctx) {
+      if (!ctx.robotsTxt.fetched || !ctx.robotsTxt.body) {
+        return { status: "info", message: "No robots.txt found — every AI agent is unrestricted by default." };
+      }
+      const groups = parseRobots(ctx.robotsTxt.body);
+      const paths = shoppingPaths(ctx);
+      const blockedFrom = (ua: string) => paths.filter((p) => !isPathAllowed(groups, ua, p));
+      const liveBlocked = USER_TRIGGERED_AGENTS.filter((ua) => blockedFrom(ua).length > 0);
+      const trainingBlocked = TRAINING_AGENTS.filter((ua) => blockedFrom(ua).length > 0);
+      const trainingNote =
+        trainingBlocked.length > 0
+          ? ` Training crawlers blocked: ${trainingBlocked.join(", ")} (a business choice; it doesn't stop live agents).`
+          : "";
+      if (liveBlocked.length > 0) {
+        const where = [...new Set(liveBlocked.flatMap(blockedFrom))].join(", ");
+        return {
+          status: "fail",
+          message: `robots.txt blocks user-triggered/search AI agents from ${where}: ${liveBlocked.join(", ")}. These agents fetch pages when a shopper asks about a product, so the store drops out of those answers.${trainingNote}`,
+          evidence: `Checked paths: ${paths.join(", ")}`,
+          fixSuggestion: `Give ${liveBlocked.join(", ")} their own User-agent group that allows product and policy pages. To opt out of model training only, disallow GPTBot, ClaudeBot, CCBot and Google-Extended instead.`,
+        };
+      }
+      if (trainingBlocked.length > 0) {
+        return {
+          status: "pass",
+          message: `Live AI shopping/search agents can reach product pages.${trainingNote}`,
+          evidence: `Checked paths: ${paths.join(", ")}`,
+        };
+      }
+      return {
+        status: "pass",
+        message: "Live AI shopping/search agents and training crawlers can all reach product pages.",
+        evidence: `Checked paths: ${paths.join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "agent-access.content-signals",
+    category: "agent-access",
+    title: "robots.txt declares AI content-use signals",
+    weight: 1,
+    specUrl: "https://contentsignals.org/",
+    check(ctx) {
+      if (!ctx.robotsTxt.fetched || !ctx.robotsTxt.body) {
+        return { status: "skip", message: "No robots.txt to inspect." };
+      }
+      const signals = parseContentSignals(ctx.robotsTxt.body);
+      if (signals.lines.length === 0) {
+        return {
+          status: "info",
+          message: "No Content-Signal lines in robots.txt. Optional: they state whether your content may be used for search, live AI answers (ai-input) and training (ai-train).",
+        };
+      }
+      const summary = Object.entries(signals.values)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(", ");
+      if (signals.values["ai-input"] === "no") {
+        return {
+          status: "warn",
+          message: `Content-Signal sets ai-input=no (${summary}). This asks AI agents not to use your pages to answer shoppers in real time, which is how agentic shopping works.`,
+          fixSuggestion: "Set ai-input=yes (keep ai-train=no if you want to opt out of training) so answer and shopping agents may use your product pages.",
+        };
+      }
+      return { status: "pass", message: `Content-Signal declared: ${summary}.` };
     },
   },
   {

@@ -45,12 +45,12 @@ anonymized per-store scores and the method are in [`data/`](data/).
 
 | Category | What it looks at |
 |---|---|
-| `product-data` | schema.org `Product`/`Offer`/`AggregateOffer` JSON-LD: price, currency, availability, GTIN/SKU, brand, images, shipping details, return policy |
+| `product-data` | schema.org `Product`/`Offer`/`AggregateOffer` JSON-LD: price, currency, availability, GTIN/SKU (with GS1 check-digit validation), brand, images, shipping details, return policy, `ProductGroup` variants, ratings/reviews |
 | `feeds` | Product sitemap, Google Merchant-style feed discoverability |
-| `protocol-endpoints` | UCP manifest at `/.well-known/ucp`, ACP feed readiness notes, AP2 payment-handler hints |
-| `agent-access` | `robots.txt` rules for known AI agents, `llms.txt`, content visible without JS, anti-bot walls |
+| `protocol-endpoints` | UCP manifest at `/.well-known/ucp`, ACP feed readiness notes, AP2 payment-handler hints, MCP server card (`/.well-known/mcp/server-card.json`), OAuth/OpenID discovery metadata |
+| `agent-access` | `robots.txt` rules for known AI agents (live shopping/answer agents such as ChatGPT-User, OAI-SearchBot, Perplexity-User, Claude-User checked against the product page, separately from training crawlers), `Content-Signal` lines, `llms.txt`, content visible without JS, anti-bot walls |
 | `checkout-readiness` | Agent-compatible PSP hints (Stripe/PayPal/Adyen), guest checkout, price transparency |
-| `trust-signals` | HTTPS, contact/returns/privacy/terms pages |
+| `trust-signals` | HTTPS, contact/returns/privacy/terms pages, `Organization` JSON-LD on the home page |
 
 Every finding links to the spec it's based on: [UCP](https://github.com/Universal-Commerce-Protocol/ucp-schema),
 [ACP](https://developers.openai.com/commerce), [AP2](https://github.com/google-agentic-commerce/AP2),

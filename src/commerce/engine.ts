@@ -6,6 +6,7 @@ import { extractJsonLd, findProducts, loadHtml } from "./fetch/html.js";
 import { platformFix } from "./platform-fixes.js";
 import { detectPlatform } from "./platform.js";
 import { sitemapCandidates } from "./rules/feeds.js";
+import { MCP_DISCOVERY_PATHS, OAUTH_DISCOVERY_PATHS } from "./rules/protocol-endpoints.js";
 import { productDataRules } from "./rules/product-data.js";
 import { ALL_RULES } from "./rules/index.js";
 import { COMMERCE_CATEGORIES, type CommerceContext, type PageSnapshot, type WellKnownProbe } from "./types.js";
@@ -52,6 +53,9 @@ const WEAK_PRODUCT_RE = /\.html$|\/\d+-[a-z0-9-]+(\.html)?$/i;
 const NOT_PRODUCT_RE =
   /\/(category|categories|collections?|all-collections|blog|news|about|contact|help|faq|account|login|register|cart|basket|checkout|wishlist|search|policy|policies|privacy|terms|returns|delivery|shipping|stores?|careers|pages?)(\/|$)|\/shop\/?$/i;
 const MAX_PRODUCT_CANDIDATES = 8;
+
+/** Fixed paths that several rules read; fetched up front in parallel instead of one by one inside rules. */
+const PREFETCH_PATHS = ["/.well-known/ucp", "/llms.txt", ...MCP_DISCOVERY_PATHS, ...OAUTH_DISCOVERY_PATHS];
 
 function snapshot(url: string, html: string): PageSnapshot {
   const $ = loadHtml(html);
@@ -177,22 +181,32 @@ export async function scanStore(inputUrl: string, opts: CommerceScanOptions = {}
   const robotsOk = robotsRes.ok && !looksLikeHtmlDocument(robotsRes.body);
 
   const wellKnown: Record<string, WellKnownProbe> = {};
-  const fetchText = async (path: string): Promise<WellKnownProbe> => {
+  // In-flight requests are shared, so a prefetch and a rule asking for the same path fetch it once.
+  const inFlight = new Map<string, Promise<WellKnownProbe>>();
+  const fetchText = (path: string): Promise<WellKnownProbe> => {
     const cached = wellKnown[path];
-    if (cached) return cached;
-    const res = await fetchUrl(joinPath(page.finalUrl, path), headers);
-    const softNotFound = res.ok && looksLikeHtmlDocument(res.body);
-    const probe: WellKnownProbe = {
-      path,
-      status: res.status,
-      ok: res.ok && !softNotFound,
-      contentType: res.headers["content-type"],
-      body: res.body ?? undefined,
-      error: softNotFound ? "returned an HTML page instead of the expected file (soft 404)" : res.error,
-    };
-    wellKnown[path] = probe;
-    return probe;
+    if (cached) return Promise.resolve(cached);
+    const pending = inFlight.get(path);
+    if (pending) return pending;
+    const request = fetchUrl(joinPath(page.finalUrl, path), headers).then((res) => {
+      const softNotFound = res.ok && looksLikeHtmlDocument(res.body);
+      const probe: WellKnownProbe = {
+        path,
+        status: res.status,
+        ok: res.ok && !softNotFound,
+        contentType: res.headers["content-type"],
+        body: res.body ?? undefined,
+        error: softNotFound ? "returned an HTML page instead of the expected file (soft 404)" : res.error,
+      };
+      wellKnown[path] = probe;
+      inFlight.delete(path);
+      return probe;
+    });
+    inFlight.set(path, request);
+    return request;
   };
+  // Fixed-path probes run in parallel with product discovery; each is bounded by the HTTP timeout.
+  const prefetch = page.ok ? Promise.all(PREFETCH_PATHS.map(fetchText)) : Promise.resolve([]);
 
   const ctx: CommerceContext = {
     inputUrl: normalizedUrl,
@@ -261,6 +275,8 @@ export async function scanStore(inputUrl: string, opts: CommerceScanOptions = {}
       metrics.productDataScoreMax = scored[scored.length - 1]!.score;
     }
   }
+
+  await prefetch;
 
   const platform = detectPlatform([home, ctx.product], page.headers);
 

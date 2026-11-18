@@ -48,6 +48,27 @@ export const PLATFORM_FIXES: Partial<Record<string, Partial<Record<Platform, str
     prestashop: "Add a CMS page under Preferences > CMS and link it in Shop Parameters > Theme > Pages you want to display.",
     opencart: "Add an Information page (Catalog > Information) for returns and add it to the footer via the theme layout.",
   },
+  "agent-access.ai-agent-policy": {
+    shopify: "Edit robots.txt via a robots.txt.liquid template (Online Store > Themes > Edit code > Add a new template > robots) and add an Allow group for ChatGPT-User, OAI-SearchBot, Perplexity-User and Claude-User.",
+    woocommerce: "Edit robots.txt in Yoast SEO (Tools > File editor) or Rank Math (General Settings > Edit robots.txt) and give the user-triggered agents their own Allow group; check security plugins (Wordfence, Cloudflare) aren't blocking them too.",
+    magento: "Edit robots.txt in Content > Design > Configuration > (store view) > Search Engine Robots > Edit custom instruction of robots.txt File.",
+    prestashop: "Regenerate robots.txt under Shop Parameters > Traffic & SEO, then add the agent Allow groups by hand (regeneration overwrites manual edits, so re-apply them).",
+    opencart: "Edit robots.txt in the OpenCart webroot and add an Allow group for the user-triggered agents.",
+  },
+  "product-data.reviews": {
+    shopify: "Use a reviews app that writes aggregateRating into the Product JSON-LD (Judge.me, Okendo and Yotpo can), or add it from product metafields in your theme's product template.",
+    woocommerce: "Enable reviews (Settings > Products > Enable product reviews); WooCommerce adds aggregateRating to its Product JSON-LD once a product has an approved review.",
+    magento: "Enable Product Reviews (Stores > Configuration > Catalog > Product Reviews); check your theme's JSON-LD includes the review summary, since the core markup is microdata.",
+    prestashop: 'Enable the "Product Comments" module; its ratings are output as aggregateRating on 1.7.7+/8.x themes.',
+    opencart: "Enable reviews (System > Settings > Option > Reviews) and add aggregateRating to your JSON-LD extension.",
+  },
+  "trust.organization-schema": {
+    shopify: "Most Shopify themes emit Organization JSON-LD in theme.liquid only when Settings > Social media is filled in; add the links, or paste an Organization JSON-LD block into theme.liquid.",
+    woocommerce: "Fill in Yoast SEO > Settings > Site representation (Organization, logo, social profiles) or Rank Math > Titles & Meta > Local SEO.",
+    magento: "No core Organization markup; add a JSON-LD block to the default head blocks (Content > Design > Configuration > HTML Head > Scripts and Style Sheets).",
+    prestashop: "Most structured-data modules add Organization on the home page; otherwise add a JSON-LD block to your theme's head.tpl.",
+    opencart: "Add an Organization JSON-LD block to catalog/view/theme/*/template/common/header.twig.",
+  },
 };
 
 export function platformFix(ruleId: string, platform: Platform): string | undefined {
