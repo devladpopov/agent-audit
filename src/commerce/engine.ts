@@ -2,9 +2,10 @@ import { BROWSER_HEADERS, fetchUrl, joinPath } from "../core/http.js";
 import { runRules } from "../core/runner.js";
 import { scoreCategory } from "../core/scorer.js";
 import type { Finding, ScanResult } from "../core/types.js";
-import { extractJsonLd, findByType, loadHtml } from "./fetch/html.js";
+import { extractJsonLd, findProducts, loadHtml } from "./fetch/html.js";
 import { platformFix } from "./platform-fixes.js";
 import { detectPlatform } from "./platform.js";
+import { sitemapCandidates } from "./rules/feeds.js";
 import { productDataRules } from "./rules/product-data.js";
 import { ALL_RULES } from "./rules/index.js";
 import { COMMERCE_CATEGORIES, type CommerceContext, type PageSnapshot, type WellKnownProbe } from "./types.js";
@@ -66,7 +67,7 @@ function isOgProduct(page: PageSnapshot): boolean {
 }
 
 function hasProduct(page: PageSnapshot): boolean {
-  return findByType(page.jsonLd, "Product").length > 0 || hasMicrodataProduct(page);
+  return findProducts(page.jsonLd).length > 0 || hasMicrodataProduct(page);
 }
 
 /** Registrable-domain match so shop.example.com counts for example.com (approximate, no PSL). */
@@ -125,8 +126,9 @@ function locsFromSitemap(xml: string): string[] {
 async function productLinksFromSitemap(
   fetchText: CommerceContext["fetchText"],
   headers: Record<string, string> | undefined,
+  sitemapPaths: string[],
 ): Promise<string[]> {
-  for (const path of ["/sitemap.xml", "/sitemap_index.xml"]) {
+  for (const path of sitemapPaths) {
     const probe = await fetchText(path);
     if (!probe.ok || !probe.body) continue;
     const locs = locsFromSitemap(probe.body);
@@ -169,7 +171,9 @@ export async function scanStore(inputUrl: string, opts: CommerceScanOptions = {}
   if (!page.ok) errors.push(`Failed to fetch ${normalizedUrl}: ${page.error ?? `HTTP ${page.status}`}`);
   const home = snapshot(page.finalUrl, page.body ?? "");
 
-  const robotsRes = await fetchUrl(joinPath(page.finalUrl, "/robots.txt"), headers);
+  let robotsRes = await fetchUrl(joinPath(page.finalUrl, "/robots.txt"), headers);
+  // A store that refuses even a browser for its pages may still serve robots.txt, which is worth reporting.
+  if (!robotsRes.ok && !page.ok) robotsRes = await fetchUrl(joinPath(page.finalUrl, "/robots.txt"), BROWSER_HEADERS);
   const robotsOk = robotsRes.ok && !looksLikeHtmlDocument(robotsRes.body);
 
   const wellKnown: Record<string, WellKnownProbe> = {};
@@ -219,7 +223,7 @@ export async function scanStore(inputUrl: string, opts: CommerceScanOptions = {}
     ctx.productSource = "input";
   } else {
     // Sitemap product entries are the most reliable, then ranked links from the home page.
-    const fromSitemap = await productLinksFromSitemap(fetchText, headers);
+    const fromSitemap = await productLinksFromSitemap(fetchText, headers, sitemapCandidates(ctx));
     // Sitemap product entries and strong URL shapes are trusted as product pages even without markup
     // (a product page with no structured data is exactly what we want to report). Heuristic links
     // must prove themselves with Product markup or og:type=product, otherwise we'd grade a category page.
@@ -268,7 +272,10 @@ export async function scanStore(inputUrl: string, opts: CommerceScanOptions = {}
     categories: COMMERCE_CATEGORIES,
     // When the store refuses both a bot and a browser there is nothing meaningful to check;
     // report only the reachability failure instead of cascading dozens of misleading "missing" findings.
-    rules: page.ok ? ALL_RULES : ALL_RULES.filter((r) => r.id === "agent-access.reachable"),
+    // robots.txt is still evaluated when it could be fetched on its own.
+    rules: page.ok
+      ? ALL_RULES
+      : ALL_RULES.filter((r) => r.id === "agent-access.reachable" || (robotsOk && r.id === "agent-access.robots-not-blocking")),
     ctx,
     errors,
     metrics: Object.keys(metrics).length > 0 ? metrics : undefined,

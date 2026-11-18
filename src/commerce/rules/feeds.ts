@@ -1,6 +1,13 @@
-import type { CommerceRule } from "../types.js";
+import { sitemapsFromRobots } from "../fetch/robots.js";
+import type { CommerceContext, CommerceRule } from "../types.js";
 
 const SITEMAP_PATHS = ["/sitemap.xml", "/sitemap_index.xml"];
+
+/** Sitemaps declared in robots.txt first (stores often use non-default names), then the conventional paths. */
+export function sitemapCandidates(ctx: Pick<CommerceContext, "robotsTxt" | "finalUrl">): string[] {
+  const declared = ctx.robotsTxt.body ? sitemapsFromRobots(ctx.robotsTxt.body, ctx.finalUrl) : [];
+  return [...declared, ...SITEMAP_PATHS];
+}
 const FEED_PATHS = [
   "/feed/google-merchant.xml",
   "/products.xml",
@@ -17,13 +24,13 @@ export const feedsRules: CommerceRule[] = [
     weight: 2,
     specUrl: "https://www.sitemaps.org/protocol.html",
     async check(ctx) {
-      for (const path of SITEMAP_PATHS) {
+      for (const path of sitemapCandidates(ctx)) {
         const probe = await ctx.fetchText(path);
         if (probe.ok) return { status: "pass", message: `Sitemap found at ${path}.` };
       }
       return {
         status: "warn",
-        message: "No sitemap.xml or sitemap_index.xml found.",
+        message: "No sitemap found (none declared in robots.txt, no sitemap.xml or sitemap_index.xml).",
         fixSuggestion: "Publish an XML sitemap covering product URLs and reference it from robots.txt.",
       };
     },
@@ -36,7 +43,7 @@ export const feedsRules: CommerceRule[] = [
     check(ctx) {
       // Best-effort heuristic: this rule inspects the sitemap probes already fetched by feeds.sitemap-present
       // via ctx.wellKnown (populated by the engine for every path any rule has requested so far).
-      const sitemap = SITEMAP_PATHS.map((p) => ctx.wellKnown[p]).find((p) => p?.ok && p.body);
+      const sitemap = sitemapCandidates(ctx).map((p) => ctx.wellKnown[p]).find((p) => p?.ok && p.body);
       if (!sitemap?.body) return { status: "skip", message: "No sitemap body available to inspect." };
       const looksLikeProducts = /\/(product|products|shop|item|p)\//i.test(sitemap.body);
       if (looksLikeProducts) return { status: "pass", message: "Sitemap references product-like URLs." };

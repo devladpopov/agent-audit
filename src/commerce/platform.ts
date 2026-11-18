@@ -13,6 +13,18 @@ interface Signal {
 }
 
 const SIGNALS: Signal[] = [
+  // Shopify goes first: its inline JS can mention generic markers other platforms are matched on
+  // (e.g. "form_key"), which made Shopify stores show up as Magento in the 100-store run.
+  {
+    platform: "shopify",
+    test: (p, h) =>
+      /shopify/i.test(h["powered-by"] ?? "") ||
+      "x-shopid" in h ||
+      "x-shopify-stage" in h ||
+      /cdn\.shopify\.com/i.test(p.html) ||
+      /Shopify\.theme\b/.test(p.html),
+    evidence: "Powered-By: Shopify / X-ShopId header, cdn.shopify.com asset or Shopify.theme in the page",
+  },
   {
     platform: "woocommerce",
     test: (p) => /woocommerce/i.test(p.html) && /wp-content/i.test(p.html),
@@ -20,8 +32,11 @@ const SIGNALS: Signal[] = [
   },
   {
     platform: "magento",
-    test: (p, h) => "x-magento-varnish-pool" in h || /form_key/.test(p.html) || /Mage\.Cookies/.test(p.html),
-    evidence: "X-Magento-* header, form_key or Mage.Cookies in the page",
+    test: (p, h) =>
+      Object.keys(h).some((k) => k.startsWith("x-magento-")) ||
+      /name=["']form_key["']/.test(p.html) ||
+      /Mage\.Cookies|text\/x-magento-init|data-mage-init/.test(p.html),
+    evidence: "X-Magento-* header, a form_key form field, Mage.Cookies or x-magento-init in the page",
   },
   {
     platform: "prestashop",
@@ -32,11 +47,6 @@ const SIGNALS: Signal[] = [
     platform: "opencart",
     test: (p) => /catalog\/view\/theme/i.test(p.html) || /route=product\/product/i.test(p.html),
     evidence: '"catalog/view/theme" or "route=product/product" in the page',
-  },
-  {
-    platform: "shopify",
-    test: (p, h) => /cdn\.shopify\.com/i.test(p.html) || "x-shopid" in h,
-    evidence: "cdn.shopify.com asset or X-ShopId header",
   },
 ];
 

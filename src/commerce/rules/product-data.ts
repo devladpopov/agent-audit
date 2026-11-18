@@ -1,5 +1,5 @@
 import type { CommerceRule } from "../types.js";
-import { findByType } from "../fetch/html.js";
+import { findProducts } from "../fetch/html.js";
 
 const SCHEMA_SPEC = "https://schema.org/Product";
 
@@ -51,7 +51,7 @@ export const productDataRules: CommerceRule[] = [
     weight: 3,
     specUrl: SCHEMA_SPEC,
     check(ctx) {
-      const products = findByType(ctx.product.jsonLd, "Product");
+      const products = findProducts(ctx.product.jsonLd);
       if (products.length > 0) return { status: "pass", message: `${products.length} Product node(s) found.` };
       if (ctx.product.$('[itemtype*="schema.org/Product" i]').length > 0) {
         return {
@@ -74,7 +74,7 @@ export const productDataRules: CommerceRule[] = [
     weight: 3,
     specUrl: "https://schema.org/Offer",
     check(ctx) {
-      const products = findByType(ctx.product.jsonLd, "Product");
+      const products = findProducts(ctx.product.jsonLd);
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const missing: string[] = [];
       let anyOffer = false;
@@ -106,7 +106,7 @@ export const productDataRules: CommerceRule[] = [
     weight: 2,
     specUrl: "https://schema.org/availability",
     check(ctx) {
-      const products = findByType(ctx.product.jsonLd, "Product");
+      const products = findProducts(ctx.product.jsonLd);
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const offers = products.flatMap(getOffers);
       if (offers.length === 0) return { status: "skip", message: "No offers to check." };
@@ -126,7 +126,7 @@ export const productDataRules: CommerceRule[] = [
     weight: 2,
     specUrl: "https://schema.org/gtin",
     check(ctx) {
-      const products = findByType(ctx.product.jsonLd, "Product");
+      const products = findProducts(ctx.product.jsonLd);
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const idFields = ["gtin", "gtin8", "gtin12", "gtin13", "gtin14", "sku", "mpn"];
       const missing = products.filter((p) => !idFields.some((f) => p[f] !== undefined));
@@ -145,7 +145,7 @@ export const productDataRules: CommerceRule[] = [
     weight: 1,
     specUrl: SCHEMA_SPEC,
     check(ctx) {
-      const products = findByType(ctx.product.jsonLd, "Product");
+      const products = findProducts(ctx.product.jsonLd);
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const missingBrand = products.filter((p) => p.brand === undefined).length;
       const missingImage = products.filter((p) => p.image === undefined).length;
@@ -164,7 +164,7 @@ export const productDataRules: CommerceRule[] = [
     weight: 2,
     specUrl: "https://schema.org/OfferShippingDetails",
     check(ctx) {
-      const products = findByType(ctx.product.jsonLd, "Product");
+      const products = findProducts(ctx.product.jsonLd);
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const offers = products.flatMap(getOffers);
       if (offers.length === 0) return { status: "skip", message: "No offers to check." };
@@ -184,7 +184,7 @@ export const productDataRules: CommerceRule[] = [
     weight: 2,
     specUrl: "https://schema.org/MerchantReturnPolicy",
     check(ctx) {
-      const products = findByType(ctx.product.jsonLd, "Product");
+      const products = findProducts(ctx.product.jsonLd);
       if (products.length === 0) return { status: "skip", message: "No Product node to check." };
       const offers = products.flatMap(getOffers);
       if (offers.length === 0) return { status: "skip", message: "No offers to check." };

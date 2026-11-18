@@ -1,5 +1,19 @@
 import type { CommerceRule } from "../types.js";
 
+/**
+ * Current UCP profiles (Shopify, Zara, IKEA, 2026) nest everything under a top-level "ucp" key, next to
+ * "signing_keys"; early drafts put version/services at the root. Accept both.
+ */
+function ucpBody(manifest: any): any {
+  return manifest && typeof manifest.ucp === "object" && manifest.ucp !== null ? manifest.ucp : (manifest ?? {});
+}
+
+/** services / payment_handlers are maps keyed by reverse-domain name ("dev.ucp.shopping") in the current spec, arrays in early drafts. */
+function nonEmpty(v: unknown): boolean {
+  if (Array.isArray(v)) return v.length > 0;
+  return !!v && typeof v === "object" && Object.keys(v).length > 0;
+}
+
 export const protocolEndpointRules: CommerceRule[] = [
   {
     id: "protocol.ucp-manifest",
@@ -21,16 +35,17 @@ export const protocolEndpointRules: CommerceRule[] = [
         };
       }
       try {
-        const manifest = JSON.parse(probe.body ?? "");
+        const manifest = ucpBody(JSON.parse((probe.body ?? "").replace(/^\uFEFF/, "")));
         const hasVersion = manifest.version !== undefined;
-        const hasServices = Array.isArray(manifest.services) && manifest.services.length > 0;
+        const hasServices = nonEmpty(manifest.services);
         if (hasVersion && hasServices) {
-          return { status: "pass", message: `UCP manifest found (version ${manifest.version}).` };
+          const services = Array.isArray(manifest.services) ? "" : `; services: ${Object.keys(manifest.services).join(", ")}`;
+          return { status: "pass", message: `UCP manifest found (version ${manifest.version}${services}).` };
         }
         return {
           status: "warn",
           message: "UCP manifest found but missing version and/or services fields.",
-          fixSuggestion: "Ensure the UCP manifest declares version and a non-empty services array per the UCP schema.",
+          fixSuggestion: "Ensure the UCP manifest declares ucp.version and a non-empty ucp.services map per the UCP spec.",
         };
       } catch {
         return {
@@ -65,10 +80,11 @@ export const protocolEndpointRules: CommerceRule[] = [
       const ucp = ctx.wellKnown["/.well-known/ucp"];
       if (ucp?.ok && ucp.body) {
         try {
-          const manifest = JSON.parse(ucp.body);
+          const manifest = ucpBody(JSON.parse(ucp.body.replace(/^\uFEFF/, "")));
           const handlers = manifest.paymentHandlers ?? manifest.payment_handlers;
-          if (Array.isArray(handlers) && handlers.length > 0) {
-            return { status: "pass", message: `UCP manifest declares ${handlers.length} payment handler(s), a prerequisite for AP2 mandates.` };
+          if (nonEmpty(handlers)) {
+            const count = Array.isArray(handlers) ? handlers.length : Object.keys(handlers).length;
+            return { status: "pass", message: `UCP manifest declares ${count} payment handler(s), a prerequisite for AP2 mandates.` };
           }
         } catch {
           // ignore — UCP validity is checked by protocol.ucp-manifest
